@@ -1,7 +1,7 @@
-# HairFlow HQ v0.2.1 fast deploy
+# HairFlow HQ v0.3.0
 
-Railway 설치 지연 개선 버전입니다.
-- package-lock.json 제거
-- eslint 의존성 제거
-- nixpacks.toml 추가로 npm install 사용
-- Next 14.2.35 유지
+팀 회의/프로젝트/Task 관리용 협업 웹사이트입니다.
+
+## 배포
+- GitHub 루트에 덮어쓰기
+- Railway 자동 배포
