@@ -1,12 +1,15 @@
-# HairFlow HQ v0.1.1 Fixed
+# HairFlow HQ v0.2.0
 
-HairFlow 팀 전용 회의/프로젝트 관리 웹사이트 MVP입니다.
+HairFlow 팀 전용 회의/프로젝트 관리 웹사이트입니다.
 
-## Railway
-- Build: `npm run build`
-- Start: `npm run start`
+## v0.2.0 변경사항
 
-## 수정사항
-- Next.js `14.2.35` 적용: Railway 보안 취약점 빌드 차단 해결
-- `package-lock.json` 제거: 이전 취약 버전 lock 방지
-- GitHub 루트 업로드용 구조
+- 팀 현황 이름을 유민, 건우, 재승, 현승으로 수정
+- 모바일 상단 네비게이션 추가
+- 사이드바/카드/버튼 클릭 전환 추가
+- 대시보드, 프로젝트, Task, 회의록, 팀원, 문서, 설정 섹션 분리
+- 모바일에서 Task Board 가로 스크롤 지원
+
+## 배포
+
+Railway 기본 설정으로 배포 가능합니다.
