@@ -1,6 +1,6 @@
 {
   "name": "hairflow-hq",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -13,9 +13,9 @@
     "react-dom": "18.3.1"
   },
   "devDependencies": {
-    "typescript": "5.5.3",
-    "@types/node": "20.14.10",
-    "@types/react": "18.3.3",
-    "@types/react-dom": "18.3.0"
+    "typescript": "5.6.3",
+    "@types/node": "22.10.2",
+    "@types/react": "18.3.12",
+    "@types/react-dom": "18.3.1"
   }
 }
