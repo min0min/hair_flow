@@ -1,15 +1,7 @@
-# HairFlow HQ v0.2.0
+# HairFlow HQ v0.2.1 fast deploy
 
-HairFlow 팀 전용 회의/프로젝트 관리 웹사이트입니다.
-
-## v0.2.0 변경사항
-
-- 팀 현황 이름을 유민, 건우, 재승, 현승으로 수정
-- 모바일 상단 네비게이션 추가
-- 사이드바/카드/버튼 클릭 전환 추가
-- 대시보드, 프로젝트, Task, 회의록, 팀원, 문서, 설정 섹션 분리
-- 모바일에서 Task Board 가로 스크롤 지원
-
-## 배포
-
-Railway 기본 설정으로 배포 가능합니다.
+Railway 설치 지연 개선 버전입니다.
+- package-lock.json 제거
+- eslint 의존성 제거
+- nixpacks.toml 추가로 npm install 사용
+- Next 14.2.35 유지
