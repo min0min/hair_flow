@@ -1,11 +1,11 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
-type Tab = 'dashboard' | 'weeks' | 'tasks' | 'meetings' | 'assistant' | 'links' | 'calendar' | 'team' | 'docs' | 'settings';
+type Tab = 'dashboard' | 'weeks' | 'tasks' | 'meetings' | 'assistant' | 'links' | 'calendar' | 'team' | 'docs' | 'database' | 'settings';
 type Priority = 'P0' | 'P1' | 'P2';
 type Status = '대기' | '진행중' | '검토' | '완료';
-type SettingKey = 'autoWeek' | 'autoProgress' | 'meetingTemplate' | 'mobileMode' | 'railwayCheck' | 'teamAlert' | 'deadlineReminder';
+type SettingKey = 'autoWeek' | 'autoProgress' | 'meetingTemplate' | 'mobileMode' | 'railwayCheck' | 'teamAlert' | 'deadlineReminder' | 'localSave' | 'supabaseReady' | 'autoBackup';
 
 type ChecklistItem = {
   id: string;
@@ -200,8 +200,64 @@ export default function Page() {
     mobileMode: true,
     railwayCheck: true,
     teamAlert: true,
-    deadlineReminder: true
+    deadlineReminder: true,
+    localSave: true,
+    supabaseReady: false,
+    autoBackup: true
   });
+  const [hydrated, setHydrated] = useState(false);
+  const [lastSavedAt, setLastSavedAt] = useState('방금 전');
+  const [syncMessage, setSyncMessage] = useState('로컬 저장소 대기 중');
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem('hairflow-hq-v09');
+      if (raw) {
+        const saved = JSON.parse(raw) as {
+          weeks?: WeekPlan[];
+          tasks?: Task[];
+          meetings?: Meeting[];
+          teamName?: string;
+          settings?: Partial<Record<SettingKey, boolean>>;
+        };
+        if (saved.weeks) setWeeks(saved.weeks);
+        if (saved.tasks) setTasks(saved.tasks);
+        if (saved.meetings) setMeetingLog(saved.meetings);
+        if (saved.teamName) setTeamName(saved.teamName);
+        if (saved.settings) setSettings((prev) => ({ ...prev, ...saved.settings }));
+        setSyncMessage('브라우저 저장 데이터 불러오기 완료');
+      }
+    } catch {
+      setSyncMessage('저장 데이터 불러오기 실패 · 기본값 사용');
+    } finally {
+      setHydrated(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated || !settings.localSave) return;
+    const payload = { weeks, tasks, meetings: meetingLog, teamName, settings };
+    window.localStorage.setItem('hairflow-hq-v09', JSON.stringify(payload));
+    setLastSavedAt(new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }));
+    setSyncMessage('브라우저 자동 저장 완료');
+  }, [weeks, tasks, meetingLog, teamName, settings, hydrated]);
+
+  const resetLocalData = () => {
+    window.localStorage.removeItem('hairflow-hq-v09');
+    setWeeks(strategicWeeks);
+    setTasks(baseTasks);
+    setMeetingLog(meetings);
+    setTeamName('HairFlow 팀');
+    setSyncMessage('초기 데이터로 복구 완료');
+  };
+
+  const manualSave = () => {
+    const payload = { weeks, tasks, meetings: meetingLog, teamName, settings };
+    window.localStorage.setItem('hairflow-hq-v09', JSON.stringify(payload));
+    setLastSavedAt(new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }));
+    setSyncMessage('수동 저장 완료');
+  };
+
 
   const allItems = weeks.flatMap((w) => w.checklist.map((item) => ({ ...item, weekId: w.id, week: w.week })));
   const doneItems = allItems.filter((item) => item.done).length;
@@ -296,6 +352,7 @@ export default function Page() {
     ['calendar', '🔔', '일정/알림'],
     ['team', '👥', '팀원'],
     ['docs', '📚', '문서'],
+    ['database', '🗄️', '저장소'],
     ['settings', '⚙️', '설정']
   ] as const;
 
@@ -332,6 +389,7 @@ export default function Page() {
               <Stat title="남은 작업" value={`${todoCount}개`} sub="체크리스트 기준" />
               <Stat title="현재 운영 주차" value={nextWeek?.week || '완료'} sub={nextWeek ? nextWeek.title : '릴리즈 준비 완료'} />
               <Stat title="이번 주 마감" value={`${currentWeekTasks.length}개`} sub={`${urgentAlerts}개 긴급 알림`} />
+              <Stat title="저장 상태" value={settings.localSave ? 'ON' : 'OFF'} sub={`${lastSavedAt} 저장`} />
             </div>
             <div className="grid two">
               <Card title="🗓️ 자동 주차 로드맵" action="전체 보기" onAction={() => setTab('weeks')}>
@@ -387,7 +445,7 @@ export default function Page() {
         {tab === 'meetings' && <><Hero eyebrow="주차별 회의록" title="이번 주에 무엇을 회의해야 하는지 명확하게." desc="회의 요약, 결정사항, 다음 액션, 담당자를 주차별로 관리합니다." /><MeetingList meetings={meetingLog} tasks={tasks} setTab={setTab} full weeks={weeks} /></>}
         {tab === 'assistant' && (
           <>
-            <Hero eyebrow="AI 프로젝트 비서 v0.8" title="막 적으면 회의록처럼 정리." desc="현재는 템플릿 기반 Mock 기능이며, 이후 실제 AI API와 Supabase 저장에 연결합니다." />
+            <Hero eyebrow="AI 프로젝트 비서 v0.9" title="막 적으면 회의록처럼 정리." desc="현재는 템플릿 기반 Mock 기능이며, 이후 실제 AI API와 Supabase 저장에 연결합니다." />
             <div className="grid two uneven">
               <Card title="회의 내용 입력">
                 <select className="select" value={selectedWeek} onChange={(e) => setSelectedWeek(e.target.value)}>
@@ -409,7 +467,7 @@ export default function Page() {
 
         {tab === 'links' && (
           <>
-            <Hero eyebrow="v0.8 연결맵" title="회의록 → Task → 주차 → 진행률." desc="이제 각 데이터가 따로 노는 게 아니라 하나의 프로젝트 흐름으로 연결됩니다." />
+            <Hero eyebrow="v0.9 연결맵" title="회의록 → Task → 주차 → 진행률." desc="이제 각 데이터가 따로 노는 게 아니라 하나의 프로젝트 흐름으로 연결됩니다." />
             <div className="grid two uneven">
               <Card title="🔗 선택 주차 연결 구조">
                 <select className="select" value={selectedWeek} onChange={(e) => setSelectedWeek(e.target.value)}>
@@ -428,7 +486,7 @@ export default function Page() {
               <Card title="📌 다음 연결 예정">
                 <ul className="agenda">
                   <li>v0.8 팀원별 마감일, 개인 할 일, 알림 화면 완료</li>
-                  <li>v0.9 Supabase 실제 저장 연결</li>
+                  <li>v0.9 로컬 저장 + Supabase 연결 준비 완료</li>
                   <li>v1.0 팀원 초대, 권한, 실사용 버전</li>
                 </ul>
               </Card>
@@ -438,7 +496,7 @@ export default function Page() {
 
         {tab === 'calendar' && (
           <>
-            <Hero eyebrow="v0.8 일정/알림" title="마감일과 개인 작업을 한눈에." desc="팀원별 알림, 주차별 마감, 다음 회의 준비물을 자동으로 모아보는 화면입니다." />
+            <Hero eyebrow="v0.9 일정/알림" title="마감일과 개인 작업을 한눈에." desc="팀원별 알림, 주차별 마감, 다음 회의 준비물을 자동으로 모아보는 화면입니다." />
             <div className="grid two uneven">
               <DeadlinePanel weeks={weeks} tasks={tasks} alerts={teamAlerts} setTab={setTab} full />
               <PersonalPanel teamProgress={teamProgress} setSelectedWeek={setSelectedWeek} setTab={setTab} full />
@@ -448,7 +506,9 @@ export default function Page() {
 
         {tab === 'team' && <><Hero eyebrow="팀원" title="유민, 건우, 재승, 현승." desc="각자 남은 작업, 담당 주차, 알림까지 한 화면에서 확인합니다." /><div className="team-grid">{teamProgress.map((m) => <Card key={m.name} title={m.name}><p className="muted">{m.role}</p><p>{m.focus}</p><Progress value={m.progress} /><small>{m.progress}% 진행 · 연결 작업 {m.count}개 · 남은 작업 {m.left}개</small><div className="member-tasks">{m.tasks.slice(0, 3).map((task) => <span key={task.id}>{task.status} · {task.title}</span>)}</div><div className="alert-chips">{m.alerts.map((alert) => <Badge key={alert.id} tone={alert.level === '긴급' ? 'orange' : 'blue'}>{alert.level}</Badge>)}</div></Card>)}</div></>}
         {tab === 'docs' && <Docs weeks={weeks} settings={settings} />}
+        {tab === 'database' && <DatabaseHub weeks={weeks} tasks={tasks} meetings={meetingLog} projectProgress={projectProgress} settings={settings} syncMessage={syncMessage} lastSavedAt={lastSavedAt} manualSave={manualSave} resetLocalData={resetLocalData} setTab={setTab} />}
         {tab === 'settings' && <Settings teamName={teamName} setTeamName={setTeamName} settings={settings} toggleSetting={toggleSetting} />}
+
       </section>
     </main>
   );
@@ -525,6 +585,57 @@ function Docs({ weeks, settings }: { weeks: WeekPlan[]; settings: Record<Setting
   return <><Hero eyebrow="문서" title="운영 규칙과 연결 계획." desc="DB, API, AI 프롬프트, 배포 규칙을 한곳에서 확인합니다." /><div className="grid two"><Card title="📌 운영 규칙"><p className="muted">덮어쓰기 ZIP → GitHub Push → Railway 배포 → URL 확인</p><ul className="agenda"><li>주차별 체크리스트를 기준으로 전체 진행률 계산</li><li>회의록은 Week와 연결해서 작성</li><li>설정값은 Supabase 연결 전까지 화면 상태로 테스트</li></ul></Card><Card title="🧠 AI 비서 규칙"><p className="muted">요약, 체크리스트, 담당자, 우선순위, 일정, 개선 아이디어, 회의록 형태로 정리</p><div className="settings-mini">{Object.entries(settings).map(([key, value]) => <span key={key}>{key}: {value ? 'ON' : 'OFF'}</span>)}</div></Card></div><Card title="🗓️ 자동 주차 전략"><div className="doc-weeks">{weeks.map((w) => <div key={w.id}><b>{w.week}</b><strong>{w.title}</strong><span>{w.output}</span></div>)}</div></Card></>;
 }
 
+function DatabaseHub({ weeks, tasks, meetings, projectProgress, settings, syncMessage, lastSavedAt, manualSave, resetLocalData, setTab }: { weeks: WeekPlan[]; tasks: Task[]; meetings: Meeting[]; projectProgress: number; settings: Record<SettingKey, boolean>; syncMessage: string; lastSavedAt: string; manualSave: () => void; resetLocalData: () => void; setTab: (tab: Tab) => void }) {
+  const tables = [
+    { name: 'projects', desc: '프로젝트 기본 정보 / 최종 진행률 / 팀 설정', rows: 1, status: '준비 완료' },
+    { name: 'weeks', desc: 'Week 01~06 주차별 목표 / 산출물 / 회의 안건', rows: weeks.length, status: '준비 완료' },
+    { name: 'tasks', desc: 'Task Board / 담당자 / 상태 / 마감 주차', rows: tasks.length, status: '준비 완료' },
+    { name: 'meetings', desc: '회의록 / 결정사항 / Action Item / 연결 Task', rows: meetings.length, status: '준비 완료' },
+    { name: 'settings', desc: '자동화 설정 / 알림 / 모바일 / 저장 옵션', rows: Object.keys(settings).length, status: '준비 완료' }
+  ];
+  const sql = `-- HairFlow HQ v0.9 Supabase 초안\ncreate table projects (\n  id uuid primary key default gen_random_uuid(),\n  name text not null,\n  progress integer default 0,\n  created_at timestamptz default now()\n);\n\ncreate table weeks (\n  id text primary key,\n  project_id uuid references projects(id),\n  week_label text,\n  title text,\n  goal text,\n  output text,\n  progress integer default 0\n);\n\ncreate table tasks (\n  id text primary key,\n  week_id text references weeks(id),\n  title text not null,\n  owner text,\n  priority text,\n  status text,\n  due text,\n  created_at timestamptz default now()\n);\n\ncreate table meetings (\n  id text primary key,\n  week_id text references weeks(id),\n  title text,\n  summary text,\n  decisions jsonb default '[]',\n  action_items jsonb default '[]',\n  created_at timestamptz default now()\n);`;
+
+  return <>
+    <Hero eyebrow="v0.9 저장소 / Supabase 준비" title="이제 화면 상태가 저장되고, DB 연결 구조가 보인다." desc="이번 버전은 로컬 자동 저장과 Supabase 테이블 설계를 먼저 넣어 실제 연결 전환을 준비합니다." />
+    <div className="grid two uneven">
+      <Card title="🟢 저장 상태">
+        <div className="db-status">
+          <strong>{settings.localSave ? '브라우저 자동 저장 ON' : '브라우저 자동 저장 OFF'}</strong>
+          <span>{syncMessage}</span>
+          <p>마지막 저장: {lastSavedAt}</p>
+          <Progress value={projectProgress} />
+        </div>
+        <div className="button-row"><button className="primary" onClick={manualSave}>지금 저장</button><button className="ghost" onClick={resetLocalData}>초기화</button><button className="ghost dark" onClick={() => setTab('settings')}>설정 이동</button></div>
+      </Card>
+      <Card title="🧩 연결 예정 흐름">
+        <div className="flow-map compact">
+          <div><b>화면</b><strong>React</strong><span>체크/회의/설정</span></div><em>→</em>
+          <div><b>임시 저장</b><strong>Local</strong><span>현재 v0.9</span></div><em>→</em>
+          <div><b>실제 DB</b><strong>Supabase</strong><span>v1.0 전환</span></div>
+        </div>
+      </Card>
+    </div>
+    <div className="grid two uneven">
+      <Card title="🗄️ Supabase 테이블 맵">
+        <div className="table-map">
+          {tables.map((table) => <article key={table.name}><div><b>{table.name}</b><span>{table.desc}</span></div><em>{table.rows} rows</em><Badge tone="green">{table.status}</Badge></article>)}
+        </div>
+      </Card>
+      <Card title="📋 연결 체크리스트">
+        <div className="checklist static">
+          <label className="done"><input type="checkbox" checked readOnly /><div><strong>데이터 구조 분리</strong><span>weeks/tasks/meetings/settings</span></div></label>
+          <label className="done"><input type="checkbox" checked readOnly /><div><strong>브라우저 저장 적용</strong><span>새로고침 후에도 상태 유지</span></div></label>
+          <label><input type="checkbox" readOnly /><div><strong>Supabase 프로젝트 생성</strong><span>URL / ANON KEY 연결 예정</span></div></label>
+          <label><input type="checkbox" readOnly /><div><strong>Auth / 팀원 권한 연결</strong><span>유민, 건우, 재승, 현승 계정화</span></div></label>
+        </div>
+      </Card>
+    </div>
+    <Card title="🧾 Supabase SQL 초안">
+      <pre className="sql-box">{sql}</pre>
+    </Card>
+  </>;
+}
+
 function Settings({ teamName, setTeamName, settings, toggleSetting }: { teamName: string; setTeamName: (value: string) => void; settings: Record<SettingKey, boolean>; toggleSetting: (key: SettingKey) => void }) {
   const rows: { key: SettingKey; title: string; desc: string }[] = [
     { key: 'autoWeek', title: '자동 주차 플랜', desc: '프로젝트 생성 시 6주 전략 플랜을 자동 구성합니다.' },
@@ -533,7 +644,10 @@ function Settings({ teamName, setTeamName, settings, toggleSetting }: { teamName
     { key: 'mobileMode', title: '모바일 최적화', desc: '휴대폰에서 하단 네비와 카드형 화면을 우선 적용합니다.' },
     { key: 'railwayCheck', title: '배포 체크', desc: 'GitHub push 이후 Railway 확인 플로우를 문서에 표시합니다.' },
     { key: 'teamAlert', title: '팀원별 알림', desc: '담당자별 남은 작업과 주의 알림을 일정 화면에 표시합니다.' },
-    { key: 'deadlineReminder', title: '마감 리마인더', desc: '이번 주 미완료 작업과 다음 회의 준비물을 강조합니다.' }
+    { key: 'deadlineReminder', title: '마감 리마인더', desc: '이번 주 미완료 작업과 다음 회의 준비물을 강조합니다.' },
+    { key: 'localSave', title: '브라우저 자동 저장', desc: '새로고침 후에도 체크리스트, 회의록, 설정값을 유지합니다.' },
+    { key: 'supabaseReady', title: 'Supabase 연결 준비', desc: 'DB 연결 전환을 위한 테이블 구조와 저장 흐름을 표시합니다.' },
+    { key: 'autoBackup', title: '자동 백업 준비', desc: '나중에 Supabase에 주기적으로 백업하는 흐름을 사용할 예정입니다.' }
   ];
-  return <><Hero eyebrow="설정 v0.8" title="이제 설정도 눌러볼 수 있게." desc="아직 DB 저장 전이지만, 최종 연결 구조를 기준으로 동작 흐름을 잡았습니다." /><div className="grid two uneven"><Card title="팀 기본 설정"><label className="input-label">팀 이름<input value={teamName} onChange={(e) => setTeamName(e.target.value)} /></label><div className="settings-preview"><b>{teamName}</b><span>HairFlow HQ 운영 워크스페이스</span></div></Card><Card title="연결 예정"><ul className="agenda"><li>v0.7: Task ↔ 회의록 ↔ 주차 연결 강화 완료</li><li>v0.8: 팀원별 마감일 / 알림 완료</li><li>v0.9: Supabase 실제 저장</li><li>v1.0: 팀원 실사용 정식 버전</li></ul></Card></div><Card title="자동화 설정"><div className="setting-list">{rows.map((row) => <button key={row.key} onClick={() => toggleSetting(row.key)} className={settings[row.key] ? 'on' : ''}><div><strong>{row.title}</strong><span>{row.desc}</span></div><em>{settings[row.key] ? 'ON' : 'OFF'}</em></button>)}</div></Card></>;
+  return <><Hero eyebrow="설정 v0.9" title="이제 설정도 눌러볼 수 있게." desc="아직 DB 저장 전이지만, 최종 연결 구조를 기준으로 동작 흐름을 잡았습니다." /><div className="grid two uneven"><Card title="팀 기본 설정"><label className="input-label">팀 이름<input value={teamName} onChange={(e) => setTeamName(e.target.value)} /></label><div className="settings-preview"><b>{teamName}</b><span>HairFlow HQ 운영 워크스페이스</span></div></Card><Card title="연결 예정"><ul className="agenda"><li>v0.7: Task ↔ 회의록 ↔ 주차 연결 강화 완료</li><li>v0.8: 팀원별 마감일 / 알림 완료</li><li>v0.9: 로컬 자동 저장 + Supabase 테이블 준비</li><li>v1.0: 팀원 실사용 정식 버전</li></ul></Card></div><Card title="자동화 설정"><div className="setting-list">{rows.map((row) => <button key={row.key} onClick={() => toggleSetting(row.key)} className={settings[row.key] ? 'on' : ''}><div><strong>{row.title}</strong><span>{row.desc}</span></div><em>{settings[row.key] ? 'ON' : 'OFF'}</em></button>)}</div></Card></>;
 }
