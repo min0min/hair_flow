@@ -2,10 +2,10 @@
 
 import { useMemo, useState } from 'react';
 
-type Tab = 'dashboard' | 'weeks' | 'tasks' | 'meetings' | 'assistant' | 'links' | 'team' | 'docs' | 'settings';
+type Tab = 'dashboard' | 'weeks' | 'tasks' | 'meetings' | 'assistant' | 'links' | 'calendar' | 'team' | 'docs' | 'settings';
 type Priority = 'P0' | 'P1' | 'P2';
 type Status = '대기' | '진행중' | '검토' | '완료';
-type SettingKey = 'autoWeek' | 'autoProgress' | 'meetingTemplate' | 'mobileMode' | 'railwayCheck';
+type SettingKey = 'autoWeek' | 'autoProgress' | 'meetingTemplate' | 'mobileMode' | 'railwayCheck' | 'teamAlert' | 'deadlineReminder';
 
 type ChecklistItem = {
   id: string;
@@ -45,6 +45,14 @@ type Meeting = {
   decisions: string[];
   linkedTasks: string[];
   actionItems: string[];
+};
+
+type TeamAlert = {
+  id: string;
+  title: string;
+  owner: string;
+  weekId: string;
+  level: '긴급' | '주의' | '안내';
 };
 
 const team = [
@@ -150,6 +158,14 @@ const baseTasks: Task[] = [
   { id: 't6', title: 'Supabase 테이블 초안 작성', owner: '재승', priority: 'P0', status: '대기', weekId: 'week4', due: 'Week 04' }
 ];
 
+
+const teamAlerts: TeamAlert[] = [
+  { id: 'a1', title: 'Week 03 AI 비서 화면 검수 필요', owner: '유민', weekId: 'week3', level: '주의' },
+  { id: 'a2', title: '모바일 하단 네비 QA 확인', owner: '건우', weekId: 'week3', level: '안내' },
+  { id: 'a3', title: '진행률 계산 로직 Supabase 전환 준비', owner: '재승', weekId: 'week4', level: '긴급' },
+  { id: 'a4', title: '회의록 템플릿 최종 문구 정리', owner: '현승', weekId: 'week3', level: '주의' }
+];
+
 const meetings: Meeting[] = [
   { id: 'm1', weekId: 'week1', title: '1차 기획 회의', summary: '회의용 HQ 범위와 배포 방식 확정', date: 'Week 01 / 월요일', decisions: ['HairFlow 구현 전 회의용 사이트부터 제작', 'GitHub → Railway 배포 플로우 사용'], linkedTasks: ['t1'], actionItems: ['MVP 범위 확정', '배포 흐름 확인'] },
   { id: 'm2', weekId: 'week2', title: '진행률 자동화 회의', summary: '체크리스트 완료가 프로젝트 퍼센트로 반영되는 구조 확정', date: 'Week 02 / 수요일', decisions: ['주차별 체크리스트 기반 진행률 계산', '회의록과 Task Board를 연결'], linkedTasks: ['t2', 't3', 't4'], actionItems: ['진행률 계산 확인', '모바일 UI 개선', '회의록 세분화'] },
@@ -182,7 +198,9 @@ export default function Page() {
     autoProgress: true,
     meetingTemplate: true,
     mobileMode: true,
-    railwayCheck: true
+    railwayCheck: true,
+    teamAlert: true,
+    deadlineReminder: true
   });
 
   const allItems = weeks.flatMap((w) => w.checklist.map((item) => ({ ...item, weekId: w.id, week: w.week })));
@@ -198,8 +216,12 @@ export default function Page() {
   const linkedCompletion = percent(activeWeekTasks.filter((task) => task.status === '완료').length + activeWeek.checklist.filter((i) => i.done).length, activeWeekTasks.length + activeWeek.checklist.length);
   const teamProgress = team.map((member) => {
     const items = allItems.filter((item) => item.owner === member.name);
-    return { ...member, progress: percent(items.filter((i) => i.done).length, items.length), count: items.length, left: items.filter((i) => !i.done).length };
+    const memberTasks = tasks.filter((task) => task.owner === member.name);
+    const alerts = teamAlerts.filter((alert) => alert.owner === member.name);
+    return { ...member, progress: percent(items.filter((i) => i.done).length, items.length), count: items.length, left: items.filter((i) => !i.done).length, tasks: memberTasks, alerts };
   });
+  const urgentAlerts = teamAlerts.filter((alert) => alert.level === '긴급').length;
+  const currentWeekTasks = tasks.filter((task) => task.weekId === selectedWeek && task.status !== '완료');
 
   const toggleItem = (weekId: string, itemId: string) => {
     setWeeks((prev) => prev.map((w) => w.id !== weekId ? w : {
@@ -271,6 +293,7 @@ export default function Page() {
     ['meetings', '📝', '회의록'],
     ['assistant', '🤖', 'AI 비서'],
     ['links', '🔗', '연결맵'],
+    ['calendar', '🔔', '일정/알림'],
     ['team', '👥', '팀원'],
     ['docs', '📚', '문서'],
     ['settings', '⚙️', '설정']
@@ -308,7 +331,7 @@ export default function Page() {
               <Stat title="프로젝트 진행률" value={`${projectProgress}%`} sub={`${100 - projectProgress}% 남음`} />
               <Stat title="남은 작업" value={`${todoCount}개`} sub="체크리스트 기준" />
               <Stat title="현재 운영 주차" value={nextWeek?.week || '완료'} sub={nextWeek ? nextWeek.title : '릴리즈 준비 완료'} />
-              <Stat title="자동화 설정" value={`${Object.values(settings).filter(Boolean).length}/5`} sub="활성화" />
+              <Stat title="이번 주 마감" value={`${currentWeekTasks.length}개`} sub={`${urgentAlerts}개 긴급 알림`} />
             </div>
             <div className="grid two">
               <Card title="🗓️ 자동 주차 로드맵" action="전체 보기" onAction={() => setTab('weeks')}>
@@ -326,6 +349,10 @@ export default function Page() {
             <div className="grid two">
               <TaskBoard tasks={tasks} weeks={weeks} />
               <MeetingList meetings={meetingLog} tasks={tasks} setTab={setTab} />
+            </div>
+            <div className="grid two">
+              <DeadlinePanel weeks={weeks} tasks={tasks} alerts={teamAlerts} setTab={setTab} />
+              <PersonalPanel teamProgress={teamProgress} setSelectedWeek={setSelectedWeek} setTab={setTab} />
             </div>
           </>
         )}
@@ -360,7 +387,7 @@ export default function Page() {
         {tab === 'meetings' && <><Hero eyebrow="주차별 회의록" title="이번 주에 무엇을 회의해야 하는지 명확하게." desc="회의 요약, 결정사항, 다음 액션, 담당자를 주차별로 관리합니다." /><MeetingList meetings={meetingLog} tasks={tasks} setTab={setTab} full weeks={weeks} /></>}
         {tab === 'assistant' && (
           <>
-            <Hero eyebrow="AI 프로젝트 비서 v0.7" title="막 적으면 회의록처럼 정리." desc="현재는 템플릿 기반 Mock 기능이며, 이후 실제 AI API와 Supabase 저장에 연결합니다." />
+            <Hero eyebrow="AI 프로젝트 비서 v0.8" title="막 적으면 회의록처럼 정리." desc="현재는 템플릿 기반 Mock 기능이며, 이후 실제 AI API와 Supabase 저장에 연결합니다." />
             <div className="grid two uneven">
               <Card title="회의 내용 입력">
                 <select className="select" value={selectedWeek} onChange={(e) => setSelectedWeek(e.target.value)}>
@@ -382,7 +409,7 @@ export default function Page() {
 
         {tab === 'links' && (
           <>
-            <Hero eyebrow="v0.7 연결맵" title="회의록 → Task → 주차 → 진행률." desc="이제 각 데이터가 따로 노는 게 아니라 하나의 프로젝트 흐름으로 연결됩니다." />
+            <Hero eyebrow="v0.8 연결맵" title="회의록 → Task → 주차 → 진행률." desc="이제 각 데이터가 따로 노는 게 아니라 하나의 프로젝트 흐름으로 연결됩니다." />
             <div className="grid two uneven">
               <Card title="🔗 선택 주차 연결 구조">
                 <select className="select" value={selectedWeek} onChange={(e) => setSelectedWeek(e.target.value)}>
@@ -400,7 +427,7 @@ export default function Page() {
               </Card>
               <Card title="📌 다음 연결 예정">
                 <ul className="agenda">
-                  <li>v0.8 팀원별 마감일, 개인 할 일, 알림 화면</li>
+                  <li>v0.8 팀원별 마감일, 개인 할 일, 알림 화면 완료</li>
                   <li>v0.9 Supabase 실제 저장 연결</li>
                   <li>v1.0 팀원 초대, 권한, 실사용 버전</li>
                 </ul>
@@ -409,7 +436,17 @@ export default function Page() {
           </>
         )}
 
-        {tab === 'team' && <><Hero eyebrow="팀원" title="유민, 건우, 재승, 현승." desc="역할은 설정 연결 전까지 기본 형태로 관리합니다." /><div className="team-grid">{teamProgress.map((m) => <Card key={m.name} title={m.name}><p className="muted">{m.role}</p><p>{m.focus}</p><Progress value={m.progress} /><small>{m.progress}% 진행 · 연결 작업 {m.count}개 · 남은 작업 {m.left}개</small></Card>)}</div></>}
+        {tab === 'calendar' && (
+          <>
+            <Hero eyebrow="v0.8 일정/알림" title="마감일과 개인 작업을 한눈에." desc="팀원별 알림, 주차별 마감, 다음 회의 준비물을 자동으로 모아보는 화면입니다." />
+            <div className="grid two uneven">
+              <DeadlinePanel weeks={weeks} tasks={tasks} alerts={teamAlerts} setTab={setTab} full />
+              <PersonalPanel teamProgress={teamProgress} setSelectedWeek={setSelectedWeek} setTab={setTab} full />
+            </div>
+          </>
+        )}
+
+        {tab === 'team' && <><Hero eyebrow="팀원" title="유민, 건우, 재승, 현승." desc="각자 남은 작업, 담당 주차, 알림까지 한 화면에서 확인합니다." /><div className="team-grid">{teamProgress.map((m) => <Card key={m.name} title={m.name}><p className="muted">{m.role}</p><p>{m.focus}</p><Progress value={m.progress} /><small>{m.progress}% 진행 · 연결 작업 {m.count}개 · 남은 작업 {m.left}개</small><div className="member-tasks">{m.tasks.slice(0, 3).map((task) => <span key={task.id}>{task.status} · {task.title}</span>)}</div><div className="alert-chips">{m.alerts.map((alert) => <Badge key={alert.id} tone={alert.level === '긴급' ? 'orange' : 'blue'}>{alert.level}</Badge>)}</div></Card>)}</div></>}
         {tab === 'docs' && <Docs weeks={weeks} settings={settings} />}
         {tab === 'settings' && <Settings teamName={teamName} setTeamName={setTeamName} settings={settings} toggleSetting={toggleSetting} />}
       </section>
@@ -438,6 +475,52 @@ function MeetingList({ meetings, tasks, setTab, full, weeks }: { meetings: Meeti
   return <Card title="📝 최근 회의록" action="AI 비서" onAction={() => setTab('assistant')}><div className={full ? 'meeting-list full' : 'meeting-list'}>{meetings.map((m) => <article key={m.id}><div><strong>{m.title}</strong><p>{m.summary}</p>{full && <><p className="muted">회의 주차: {weeks?.find((w) => w.id === m.weekId)?.title}</p><ul>{m.decisions.map((d) => <li key={d}>{d}</li>)}</ul><div className="linked-tasks">{m.linkedTasks.map((id) => <span key={id}>{tasks?.find((t) => t.id === id)?.title || id}</span>)}</div></>}</div><b>{m.date}</b></article>)}</div></Card>;
 }
 
+
+function DeadlinePanel({ weeks, tasks, alerts, setTab, full }: { weeks: WeekPlan[]; tasks: Task[]; alerts: TeamAlert[]; setTab: (tab: Tab) => void; full?: boolean }) {
+  const upcomingWeeks = weeks.map((week) => ({
+    week,
+    total: week.checklist.length,
+    done: week.checklist.filter((item) => item.done).length,
+    tasks: tasks.filter((task) => task.weekId === week.id && task.status !== '완료'),
+    alerts: alerts.filter((alert) => alert.weekId === week.id)
+  }));
+  return <Card title="🔔 마감/알림 센터" action="일정 보기" onAction={() => setTab('calendar')}>
+    <div className={full ? 'deadline-list full' : 'deadline-list'}>
+      {upcomingWeeks.map(({ week, total, done, tasks, alerts }) => {
+        const value = percent(done, total);
+        return <article key={week.id} className={value === 100 ? 'clear' : ''}>
+          <div>
+            <b>{week.week}</b>
+            <strong>{week.title}</strong>
+            <span>{tasks.length}개 미완료 Task · 알림 {alerts.length}개</span>
+            <Progress value={value} />
+          </div>
+          <em>{100 - value}% 남음</em>
+        </article>;
+      })}
+    </div>
+  </Card>;
+}
+
+function PersonalPanel({ teamProgress, setSelectedWeek, setTab, full }: { teamProgress: Array<{ name: string; role: string; focus: string; progress: number; count: number; left: number; tasks: Task[]; alerts: TeamAlert[] }>; setSelectedWeek: (weekId: string) => void; setTab: (tab: Tab) => void; full?: boolean }) {
+  return <Card title="👤 개인별 오늘 할 일">
+    <div className={full ? 'personal-list full' : 'personal-list'}>
+      {teamProgress.map((member) => <article key={member.name}>
+        <div className="personal-head">
+          <div><b>{member.name}</b><span>{member.role}</span></div>
+          <strong>{member.progress}%</strong>
+        </div>
+        <Progress value={member.progress} />
+        <div className="member-tasks">
+          {member.tasks.filter((task) => task.status !== '완료').slice(0, full ? 5 : 2).map((task) => <button key={task.id} onClick={() => { setSelectedWeek(task.weekId); setTab('weeks'); }}>{task.due} · {task.title}</button>)}
+          {!member.tasks.filter((task) => task.status !== '완료').length && <span>남은 작업 없음</span>}
+        </div>
+        <div className="alert-chips">{member.alerts.map((alert) => <Badge key={alert.id} tone={alert.level === '긴급' ? 'orange' : alert.level === '안내' ? 'green' : 'blue'}>{alert.level}</Badge>)}</div>
+      </article>)}
+    </div>
+  </Card>;
+}
+
 function Docs({ weeks, settings }: { weeks: WeekPlan[]; settings: Record<SettingKey, boolean> }) {
   return <><Hero eyebrow="문서" title="운영 규칙과 연결 계획." desc="DB, API, AI 프롬프트, 배포 규칙을 한곳에서 확인합니다." /><div className="grid two"><Card title="📌 운영 규칙"><p className="muted">덮어쓰기 ZIP → GitHub Push → Railway 배포 → URL 확인</p><ul className="agenda"><li>주차별 체크리스트를 기준으로 전체 진행률 계산</li><li>회의록은 Week와 연결해서 작성</li><li>설정값은 Supabase 연결 전까지 화면 상태로 테스트</li></ul></Card><Card title="🧠 AI 비서 규칙"><p className="muted">요약, 체크리스트, 담당자, 우선순위, 일정, 개선 아이디어, 회의록 형태로 정리</p><div className="settings-mini">{Object.entries(settings).map(([key, value]) => <span key={key}>{key}: {value ? 'ON' : 'OFF'}</span>)}</div></Card></div><Card title="🗓️ 자동 주차 전략"><div className="doc-weeks">{weeks.map((w) => <div key={w.id}><b>{w.week}</b><strong>{w.title}</strong><span>{w.output}</span></div>)}</div></Card></>;
 }
@@ -448,7 +531,9 @@ function Settings({ teamName, setTeamName, settings, toggleSetting }: { teamName
     { key: 'autoProgress', title: '진행률 자동 계산', desc: '체크리스트 완료 수를 기반으로 대시보드 퍼센트를 계산합니다.' },
     { key: 'meetingTemplate', title: '회의록 템플릿', desc: '요약, 체크리스트, 담당자, 우선순위 형식으로 정리합니다.' },
     { key: 'mobileMode', title: '모바일 최적화', desc: '휴대폰에서 하단 네비와 카드형 화면을 우선 적용합니다.' },
-    { key: 'railwayCheck', title: '배포 체크', desc: 'GitHub push 이후 Railway 확인 플로우를 문서에 표시합니다.' }
+    { key: 'railwayCheck', title: '배포 체크', desc: 'GitHub push 이후 Railway 확인 플로우를 문서에 표시합니다.' },
+    { key: 'teamAlert', title: '팀원별 알림', desc: '담당자별 남은 작업과 주의 알림을 일정 화면에 표시합니다.' },
+    { key: 'deadlineReminder', title: '마감 리마인더', desc: '이번 주 미완료 작업과 다음 회의 준비물을 강조합니다.' }
   ];
-  return <><Hero eyebrow="설정 v0.7" title="이제 설정도 눌러볼 수 있게." desc="아직 DB 저장 전이지만, 최종 연결 구조를 기준으로 동작 흐름을 잡았습니다." /><div className="grid two uneven"><Card title="팀 기본 설정"><label className="input-label">팀 이름<input value={teamName} onChange={(e) => setTeamName(e.target.value)} /></label><div className="settings-preview"><b>{teamName}</b><span>HairFlow HQ 운영 워크스페이스</span></div></Card><Card title="연결 예정"><ul className="agenda"><li>v0.7: Task ↔ 회의록 ↔ 주차 연결 강화 완료</li><li>v0.8: 팀원별 마감일 / 알림</li><li>v0.9: Supabase 실제 저장</li><li>v1.0: 팀원 실사용 정식 버전</li></ul></Card></div><Card title="자동화 설정"><div className="setting-list">{rows.map((row) => <button key={row.key} onClick={() => toggleSetting(row.key)} className={settings[row.key] ? 'on' : ''}><div><strong>{row.title}</strong><span>{row.desc}</span></div><em>{settings[row.key] ? 'ON' : 'OFF'}</em></button>)}</div></Card></>;
+  return <><Hero eyebrow="설정 v0.8" title="이제 설정도 눌러볼 수 있게." desc="아직 DB 저장 전이지만, 최종 연결 구조를 기준으로 동작 흐름을 잡았습니다." /><div className="grid two uneven"><Card title="팀 기본 설정"><label className="input-label">팀 이름<input value={teamName} onChange={(e) => setTeamName(e.target.value)} /></label><div className="settings-preview"><b>{teamName}</b><span>HairFlow HQ 운영 워크스페이스</span></div></Card><Card title="연결 예정"><ul className="agenda"><li>v0.7: Task ↔ 회의록 ↔ 주차 연결 강화 완료</li><li>v0.8: 팀원별 마감일 / 알림 완료</li><li>v0.9: Supabase 실제 저장</li><li>v1.0: 팀원 실사용 정식 버전</li></ul></Card></div><Card title="자동화 설정"><div className="setting-list">{rows.map((row) => <button key={row.key} onClick={() => toggleSetting(row.key)} className={settings[row.key] ? 'on' : ''}><div><strong>{row.title}</strong><span>{row.desc}</span></div><em>{settings[row.key] ? 'ON' : 'OFF'}</em></button>)}</div></Card></>;
 }
